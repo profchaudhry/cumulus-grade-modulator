@@ -200,7 +200,7 @@ export default function SessionPage() {
             { label: 'Total Students', value: students.length, color: '#fff' },
             { label: 'Grade Boosts Suggested', value: boostedCount, color: '#10B981' },
             { label: 'No Change', value: students.length - boostedCount, color: '#94A3B8' },
-            { label: 'Ranges Used', value: `${ranges.other} / F:${ranges.f}`, color: '#7DD3FC' },
+            { label: 'Ranges Used', value: `A-→A:${ranges.a} / Other:${ranges.other} / F:${ranges.f}`, color: '#7DD3FC' },
           ].map(({ label, value, color }) => (
             <div key={label}>
               <div style={{ color: '#475569', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>

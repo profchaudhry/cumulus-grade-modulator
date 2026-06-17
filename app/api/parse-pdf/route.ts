@@ -35,14 +35,18 @@ function extractMarks(str: string): {
     const rest = nums.slice(0, -totalLen)
     const maxes = [20, 15, 25, 40]
 
-    // Try all splits of rest into 4 parts (each 1-2 digits)
-    for (let a = 1; a <= 2 && a <= rest.length; a++) {
+    // Try LONGER digit splits first (2 digits before 1 digit) so "11" beats "1"
+    // when both satisfy constraints — resolves ambiguous cases like quiz=11,mid=7 vs quiz=1,mid=17
+    for (let a = 2; a >= 1; a--) {
+      if (a > rest.length) continue
       const v0 = parseInt(rest.slice(0, a))
-      if (v0 > maxes[0]) continue
-      for (let b = 1; b <= 2 && a + b <= rest.length; b++) {
+      if (v0 > maxes[0] || v0 === 0) continue
+      for (let b = 2; b >= 1; b--) {
+        if (a + b > rest.length) continue
         const v1 = parseInt(rest.slice(a, a + b))
-        if (v1 > maxes[1]) continue
-        for (let c = 1; c <= 2 && a + b + c <= rest.length; c++) {
+        if (v1 > maxes[1] || v1 === 0) continue
+        for (let c = 2; c >= 1; c--) {
+          if (a + b + c > rest.length) continue
           const v2 = parseInt(rest.slice(a + b, a + b + c))
           if (v2 > maxes[2]) continue
           const tail = rest.slice(a + b + c)
