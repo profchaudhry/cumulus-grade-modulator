@@ -162,6 +162,181 @@ export default function SessionPage() {
     router.push('/')
   }
 
+  const [exporting, setExporting] = useState<'xls' | 'pdf' | null>(null)
+
+  const getExportRows = () => {
+    // Always export ALL students in current view order (respects active sort/filter)
+    return filtered.map((s, i) => ({
+      '#': i + 1,
+      'Enrollment': s.enrollment,
+      'Name': s.name,
+      'Roadmap': s.roadmap,
+      'Assign (20)': s.assign_marks,
+      'Quiz (15)': s.quiz_marks,
+      'Mid (25)': s.mid_marks,
+      'Final (40)': s.final_marks,
+      'Total (100)': s.total,
+      'Grade': s.original_grade,
+      'Marks Added': s.suggested_addition || '',
+      'New Total': s.suggested_addition > 0 ? s.new_total : '',
+      'New Grade': s.suggested_addition > 0 ? s.new_grade : 'No change',
+    }))
+  }
+
+  const exportXLS = async () => {
+    setExporting('xls')
+    try {
+      const XLSX = await import('xlsx')
+      const rows = getExportRows()
+      const ws = XLSX.utils.json_to_sheet(rows)
+
+      // Column widths
+      ws['!cols'] = [
+        { wch: 4 }, { wch: 18 }, { wch: 28 }, { wch: 12 },
+        { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+        { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
+      ]
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Grade Modulation')
+
+      // Summary sheet
+      const summaryData = [
+        ['Cumulus Grade Modulator — Export'],
+        [''],
+        ['Course Code', session!.course_code],
+        ['Course Title', session!.course_title],
+        ['Teacher', session!.teacher_name],
+        ['Class', session!.class],
+        [''],
+        ['Ranges Used'],
+        ['A- → A Range', ranges.a],
+        ['A- to D Range', ranges.other],
+        ['F Range', ranges.f],
+        [''],
+        ['Summary'],
+        ['Total Students', students.length],
+        ['Boosts Suggested', students.filter(s => s.suggested_addition > 0).length],
+        ['No Change', students.filter(s => s.suggested_addition === 0).length],
+        [''],
+        ['Exported On', new Date().toLocaleString()],
+      ]
+      const ws2 = XLSX.utils.aoa_to_sheet(summaryData)
+      ws2['!cols'] = [{ wch: 20 }, { wch: 30 }]
+      XLSX.utils.book_append_sheet(wb, ws2, 'Summary')
+
+      const filename = `${session!.course_code}_${session!.course_title}_GradeModulation.xlsx`
+        .replace(/[^a-zA-Z0-9_\-.]/g, '_')
+      XLSX.writeFile(wb, filename)
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  const exportPDF = async () => {
+    setExporting('pdf')
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+      // Header
+      doc.setFillColor(15, 23, 42)
+      doc.rect(0, 0, 297, 28, 'F')
+      doc.setTextColor(125, 211, 252)
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text('☁ Cumulus Grade Modulator', 14, 12)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(100, 116, 139)
+      doc.text(`${session!.course_code}  ·  ${session!.course_title}  ·  ${session!.class}  ·  ${session!.teacher_name}`, 14, 20)
+      doc.text(`Ranges: A-→A=${ranges.a}  |  A-→D=${ranges.other}  |  F=${ranges.f}  |  Exported: ${new Date().toLocaleString()}`, 14, 25)
+
+      // Group rows by roadmap for PDF when in original order
+      const rows = getExportRows()
+
+      // Build table body — insert roadmap headers when grouped
+      const tableBody: (string | number)[][] = []
+      let lastRoadmap = ''
+
+      filtered.forEach((s, i) => {
+        if (groupByRoadmap && s.roadmap !== lastRoadmap) {
+          lastRoadmap = s.roadmap
+          // Roadmap header row (will be styled separately)
+          tableBody.push([
+            { content: `📚 Roadmap: ${s.roadmap}`, colSpan: 13, styles: { fillColor: [30, 58, 95], textColor: [125, 211, 252], fontStyle: 'bold', fontSize: 9 } } as unknown as string,
+          ])
+        }
+        const r = rows[i]
+        tableBody.push([
+          r['#'], r['Enrollment'], r['Name'], r['Roadmap'],
+          r['Assign (20)'], r['Quiz (15)'], r['Mid (25)'], r['Final (40)'],
+          r['Total (100)'], r['Grade'],
+          r['Marks Added'] || '—', r['New Total'] || '—', r['New Grade'],
+        ])
+      })
+
+      autoTable(doc, {
+        startY: 32,
+        head: [['#', 'Enrollment', 'Name', 'Roadmap', 'Assign', 'Quiz', 'Mid', 'Final', 'Total', 'Grade', '+Marks', 'New Total', 'New Grade']],
+        body: tableBody,
+        styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak' },
+        headStyles: { fillColor: [14, 165, 233], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 8, halign: 'center' },
+          1: { cellWidth: 28, font: 'courier' },
+          2: { cellWidth: 42 },
+          3: { cellWidth: 18, halign: 'center' },
+          4: { cellWidth: 13, halign: 'center' },
+          5: { cellWidth: 13, halign: 'center' },
+          6: { cellWidth: 13, halign: 'center' },
+          7: { cellWidth: 13, halign: 'center' },
+          8: { cellWidth: 13, halign: 'center', fontStyle: 'bold' },
+          9: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
+          10: { cellWidth: 14, halign: 'center', textColor: [14, 165, 233] },
+          11: { cellWidth: 16, halign: 'center' },
+          12: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+        },
+        didParseCell: (data) => {
+          // Highlight boosted rows
+          const studentIdx = filtered[data.row.index]
+          if (studentIdx?.suggested_addition > 0 && data.row.section === 'body') {
+            data.cell.styles.fillColor = [224, 242, 254]
+          }
+          // Grade colours in Grade column
+          if (data.column.index === 9 && data.row.section === 'body') {
+            const grade = String(data.cell.raw)
+            if (grade === 'A') data.cell.styles.textColor = [5, 150, 105]
+            else if (grade.startsWith('B')) data.cell.styles.textColor = [29, 78, 216]
+            else if (grade.startsWith('C')) data.cell.styles.textColor = [146, 64, 14]
+            else if (grade.startsWith('D')) data.cell.styles.textColor = [153, 27, 27]
+            else if (grade === 'F') data.cell.styles.textColor = [91, 33, 182]
+          }
+        },
+        margin: { left: 14, right: 14 },
+      })
+
+      // Footer
+      const pageCount = (doc as any).internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(7)
+        doc.setTextColor(148, 163, 184)
+        doc.text(`Page ${i} of ${pageCount}  ·  Cumulus Grade Modulator`, 14, doc.internal.pageSize.height - 5)
+        doc.text(`${students.length} students  ·  ${students.filter(s => s.suggested_addition > 0).length} boosts suggested`, 297 - 14, doc.internal.pageSize.height - 5, { align: 'right' })
+      }
+
+      const filename = `${session!.course_code}_${session!.course_title}_GradeModulation.pdf`
+        .replace(/[^a-zA-Z0-9_\-.]/g, '_')
+      doc.save(filename)
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const handleRecalculate = async () => {
     setSaving(true)
     await supabase.from('sessions').update({ ranges }).eq('id', id)
@@ -331,6 +506,24 @@ export default function SessionPage() {
           )}
 
           <span style={{ marginLeft: 'auto', color: '#94A3B8', fontSize: 12 }}>{filtered.length} students shown</span>
+
+          {/* Export buttons */}
+          <button
+            onClick={exportXLS}
+            disabled={exporting !== null}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #10B981', background: exporting === 'xls' ? '#D1FAE5' : '#ECFDF5', color: '#065F46', fontSize: 12, fontWeight: 600, cursor: exporting ? 'wait' : 'pointer' }}
+          >
+            <span style={{ fontSize: 14 }}>📊</span>
+            {exporting === 'xls' ? 'Exporting…' : 'Export XLS'}
+          </button>
+          <button
+            onClick={exportPDF}
+            disabled={exporting !== null}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #EF4444', background: exporting === 'pdf' ? '#FEE2E2' : '#FFF5F5', color: '#991B1B', fontSize: 12, fontWeight: 600, cursor: exporting ? 'wait' : 'pointer' }}
+          >
+            <span style={{ fontSize: 14 }}>📄</span>
+            {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+          </button>
         </div>
 
         {/* Table — grouped by roadmap when in original order */}
