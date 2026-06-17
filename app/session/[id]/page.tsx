@@ -352,9 +352,10 @@ export default function SessionPage() {
         styles: {
           fontSize: 8,
           cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
-          overflow: 'linebreak',
+          overflow: 'ellipsize',
           lineColor: [226, 232, 240],
           lineWidth: 0.1,
+          minCellHeight: 8,
         },
         headStyles: {
           fillColor: [14, 165, 233],
@@ -369,18 +370,18 @@ export default function SessionPage() {
           fillColor: [248, 250, 252],
         },
         columnStyles: {
-          0:  { cellWidth: 8,  halign: 'center', textColor: [148, 163, 184] },
-          1:  { cellWidth: 30, font: 'courier',  fontSize: 7, textColor: [71, 85, 105] },
-          2:  { cellWidth: 46, fontStyle: 'bold', textColor: [15, 23, 42] },
-          3:  { cellWidth: 18, halign: 'center', fontSize: 7, textColor: [100, 116, 139] },
-          4:  { cellWidth: 13, halign: 'center' },
-          5:  { cellWidth: 13, halign: 'center' },
-          6:  { cellWidth: 13, halign: 'center' },
-          7:  { cellWidth: 13, halign: 'center' },
-          8:  { cellWidth: 14, halign: 'center', fontStyle: 'bold', fontSize: 9 },
-          9:  { cellWidth: 14, halign: 'center', fontStyle: 'bold', fontSize: 9 },
-          10: { cellWidth: 35, halign: 'center', fontSize: 7.5 },
-          11: { cellWidth: 14, halign: 'center', fontStyle: 'bold', fontSize: 9 },
+          0:  { cellWidth: 7,  halign: 'center', textColor: [148, 163, 184] },
+          1:  { cellWidth: 32, font: 'courier',  fontSize: 7.5, textColor: [71, 85, 105] },
+          2:  { cellWidth: 52, fontStyle: 'bold', textColor: [15, 23, 42] },
+          3:  { cellWidth: 20, halign: 'center', fontSize: 7.5, textColor: [100, 116, 139] },
+          4:  { cellWidth: 14, halign: 'center' },
+          5:  { cellWidth: 14, halign: 'center' },
+          6:  { cellWidth: 14, halign: 'center' },
+          7:  { cellWidth: 14, halign: 'center' },
+          8:  { cellWidth: 16, halign: 'center', fontStyle: 'bold', fontSize: 9 },
+          9:  { cellWidth: 16, halign: 'center', fontStyle: 'bold', fontSize: 9 },
+          10: { cellWidth: 40, halign: 'center', fontSize: 8 },
+          11: { cellWidth: 16, halign: 'center', fontStyle: 'bold', fontSize: 9 },
         },
         didParseCell: (data) => {
           if (data.row.section !== 'body') return
@@ -453,8 +454,11 @@ export default function SessionPage() {
         doc.text(`${students.length} students  |  ${boostedCount} boosts`, PW - MR, pageH - 4, { align: 'right' })
       }
 
-      const filename = `${session!.course_code}_${session!.course_title}_GradeModulation.pdf`
-        .replace(/[^a-zA-Z0-9_\-.]/g, '_')
+      const now = new Date()
+      const datePart = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      const timePart = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
+      const filename = `Award List - ${session!.course_title} - ${session!.class} - ${datePart} ${timePart}.pdf`
+        .replace(/[/\\:*?"<>|]/g, '-')
       doc.save(filename)
     } finally {
       setExporting(null)
