@@ -87,6 +87,13 @@ export default function SessionPage() {
   const gradeDistrib: Record<string, number> = {}
   students.forEach(s => { gradeDistrib[s.original_grade] = (gradeDistrib[s.original_grade] || 0) + 1 })
 
+  const handleDelete = async () => {
+    if (!confirm('Delete this session and all student data? This cannot be undone.')) return
+    await supabase.from('students').delete().eq('session_id', id)
+    await supabase.from('sessions').delete().eq('id', id)
+    router.push('/')
+  }
+
   const handleRecalculate = async () => {
     setSaving(true)
     // Update ranges on session
@@ -149,6 +156,13 @@ export default function SessionPage() {
               style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', color: '#7DD3FC', fontSize: 13, cursor: 'pointer' }}
             >
               {editing ? 'Cancel' : '⚙️ Adjust Ranges'}
+            </button>
+            <button
+              onClick={handleDelete}
+              style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5', fontSize: 13, cursor: 'pointer' }}
+              title="Delete this session"
+            >
+              🗑 Delete
             </button>
           </div>
         </div>

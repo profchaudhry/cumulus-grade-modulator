@@ -16,6 +16,18 @@ export default function Home() {
   const [loadingSessions, setLoadingSessions] = useState(false)
   const [sessionsFetched, setSessionsFetched] = useState(false)
 
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const deleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    if (!confirm('Delete this session and all its student data?')) return
+    setDeletingId(id)
+    await supabase.from('students').delete().eq('session_id', id)
+    await supabase.from('sessions').delete().eq('id', id)
+    setSessions(prev => prev.filter(s => s.id !== id))
+    setDeletingId(null)
+  }
+
   const loadSessions = async () => {
     setLoadingSessions(true)
     const { data } = await supabase
@@ -154,11 +166,21 @@ export default function Home() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {sessions.map((s: any) => (
-                <button key={s.id} onClick={() => router.push(`/session/${s.id}`)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 8, cursor: 'pointer', color: '#fff', textAlign: 'left' }}>
-                  <span style={{ fontSize: 13 }}>{s.pdf_name} — {s.course_title}</span>
-                  <span style={{ fontSize: 11, color: '#7DD3FC' }}>{new Date(s.created_at).toLocaleDateString()}</span>
-                </button>
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button onClick={() => router.push(`/session/${s.id}`)}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 8, cursor: 'pointer', color: '#fff', textAlign: 'left' }}>
+                    <span style={{ fontSize: 13 }}>{s.pdf_name} — {s.course_title}</span>
+                    <span style={{ fontSize: 11, color: '#7DD3FC' }}>{new Date(s.created_at).toLocaleDateString()}</span>
+                  </button>
+                  <button
+                    onClick={(e) => deleteSession(e, s.id)}
+                    disabled={deletingId === s.id}
+                    style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: deletingId === s.id ? '#475569' : '#FCA5A5', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    title="Delete session"
+                  >
+                    {deletingId === s.id ? '…' : '🗑'}
+                  </button>
+                </div>
               ))}
             </div>
           )}
