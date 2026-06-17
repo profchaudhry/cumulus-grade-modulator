@@ -157,6 +157,7 @@ export default function SessionPage() {
         {editing && (
           <div style={{ padding: '16px 0 20px', display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             {[
+              { key: 'a' as const, label: 'A−→ A range' },
               { key: 'other' as const, label: 'A− to D range' },
               { key: 'f' as const, label: 'F range' },
             ].map(({ key, label }) => (

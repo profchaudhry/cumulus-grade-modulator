@@ -26,9 +26,9 @@ export interface ParsedCourse {
 }
 
 export interface Ranges {
-  a: number    // range for grade A (exactly A, not A-)
-  other: number // range for A- through D
-  f: number    // range for F
+  a: number      // range for boosting into A (e.g. A- student within 'a' marks of 85)
+  other: number  // range for A- down to D+ (boosting to next grade up)
+  f: number      // range for F (boosting out of F into D)
 }
 
 export interface StudentRow {
@@ -82,6 +82,9 @@ export function getGradeForTotal(total: number, scheme: GradingScheme = STANDARD
   return 'F'
 }
 
+// Grade order from lowest to highest
+const GRADE_ORDER = ['F', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A']
+
 export function computeSuggestion(
   student: ParsedStudent,
   ranges: Ranges,
@@ -90,45 +93,44 @@ export function computeSuggestion(
   const total = student.total
   const currentGrade = student.original_grade
 
-  // Determine which range bucket applies
+  // Already at A — no uplift possible
+  if (currentGrade === 'A') {
+    return { suggested_addition: 0, new_total: total, new_grade: 'A' }
+  }
+
+  // Determine the range bucket for this student's current grade
   let rangeBucket: number
   if (currentGrade === 'F') {
     rangeBucket = ranges.f
-  } else if (currentGrade === 'A') {
+  } else if (currentGrade === 'A-') {
+    // A- students are trying to reach A → use the 'a' range
     rangeBucket = ranges.a
   } else {
     rangeBucket = ranges.other
   }
 
-  // Find the boundary the student is trying to cross
-  // i.e. what's the minimum of the next grade up?
-  const gradeOrder = ['F', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A']
-  const currentIdx = gradeOrder.indexOf(currentGrade)
-
-  if (currentGrade === 'A') {
-    // Already at top grade, no suggestion needed
-    return { suggested_addition: 0, new_total: total, new_grade: 'A' }
-  }
-
-  const nextGrade = gradeOrder[currentIdx + 1]
-  if (!nextGrade) {
+  // Find what grade is one step above
+  const currentIdx = GRADE_ORDER.indexOf(currentGrade)
+  if (currentIdx === -1 || currentIdx === GRADE_ORDER.length - 1) {
     return { suggested_addition: 0, new_total: total, new_grade: currentGrade }
   }
 
-  const nextGradeMin = scheme[nextGrade]?.min ?? total + 999
+  const nextGrade = GRADE_ORDER[currentIdx + 1]
+  const nextGradeMin = scheme[nextGrade]?.min ?? (total + 999)
   const marksNeeded = nextGradeMin - total
 
-  if (marksNeeded <= rangeBucket && marksNeeded > 0) {
-    // Suggest adding exactly the marks needed to hit the next grade
-    const addition = marksNeeded
-    const newTotal = total + addition
+  // Only suggest if the gap is within the range AND positive
+  // e.g. range=2, need 2 marks → suggest +2 ✓
+  // e.g. range=2, need 3 marks → no suggestion ✗
+  // e.g. range=2, need 1 mark  → suggest +1 ✓ (within range)
+  if (marksNeeded > 0 && marksNeeded <= rangeBucket) {
+    const newTotal = total + marksNeeded
     return {
-      suggested_addition: addition,
+      suggested_addition: marksNeeded,
       new_total: newTotal,
       new_grade: getGradeForTotal(newTotal, scheme),
     }
   }
 
-  // No change suggestion
   return { suggested_addition: 0, new_total: total, new_grade: currentGrade }
 }

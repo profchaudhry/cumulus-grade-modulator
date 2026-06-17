@@ -231,10 +231,10 @@ export default function Home() {
                 </p>
 
                 {[
-                  { key: 'a' as const, label: 'Grade A', sublabel: '85–100', desc: 'Already at top — no uplift suggested', color: '#059669', readonly: true },
-                  { key: 'other' as const, label: 'Grades A− to D', sublabel: '50–84', desc: 'Marks gap to qualify for an uplift suggestion', color: '#2563EB', readonly: false },
-                  { key: 'f' as const, label: 'Grade F', sublabel: '0–49', desc: 'Marks gap to suggest boosting out of F', color: '#7C3AED', readonly: false },
-                ].map(({ key, label, sublabel, desc, color, readonly }) => (
+                  { key: 'a' as const, label: 'Grade A−→ A', sublabel: '80–84', desc: 'Marks gap for A− students to reach A (85)', color: '#059669', readonly: false },
+                  { key: 'other' as const, label: 'Grades B+→ A−, D→ B+', sublabel: '50–79', desc: 'Marks gap to qualify for a one-grade uplift', color: '#2563EB', readonly: false },
+                  { key: 'f' as const, label: 'Grade F → D', sublabel: '0–49', desc: 'Marks gap to suggest boosting out of F', color: '#7C3AED', readonly: false },
+                ].map(({ key, label, sublabel, desc, color }) => (
                   <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 16px', background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -243,16 +243,12 @@ export default function Home() {
                       </div>
                       <div style={{ color: '#64748B', fontSize: 12, marginTop: 3 }}>{desc}</div>
                     </div>
-                    {readonly ? (
-                      <div style={{ width: 70, height: 38, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 13 }}>N/A</div>
-                    ) : (
-                      <input
+                    <input
                         type="number" min={1} max={15}
                         value={ranges[key]}
                         onChange={e => setRanges(r => ({ ...r, [key]: parseInt(e.target.value) || 1 }))}
                         style={{ width: 70, height: 38, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: `1px solid ${color}44`, color: '#fff', fontSize: 16, fontWeight: 700, textAlign: 'center', outline: 'none' }}
                       />
-                    )}
                   </div>
                 ))}
 
@@ -260,9 +256,11 @@ export default function Home() {
                 <div style={{ padding: '12px 16px', background: 'rgba(14,165,233,0.08)', borderRadius: 10, border: '1px solid rgba(14,165,233,0.2)' }}>
                   <div style={{ color: '#7DD3FC', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>PREVIEW EXAMPLE</div>
                   <div style={{ color: '#94A3B8', fontSize: 12, lineHeight: 1.8 }}>
-                    Grade F range = <strong style={{ color: '#fff' }}>{ranges.f}</strong>: Student with 47 → suggest +3 → becomes D (50). Student with 48 → suggest +2. Student with 46 → no suggestion.
+                    <strong style={{ color: '#7DD3FC' }}>A−→A range = {ranges.a}:</strong> Student with 83 (A-) and range=2 → suggest +2 → becomes A (85). Student with 82 and range=2 → no suggestion (gap is 3, exceeds range).
                     <br />
-                    A−→D range = <strong style={{ color: '#fff' }}>{ranges.other}</strong>: Student with C (60) within {ranges.other} marks of C+ (64) → suggest +{Math.min(4, ranges.other)}.
+                    <strong style={{ color: '#7DD3FC' }}>A−→D range = {ranges.other}:</strong> Student with C (62) within {ranges.other} marks of C+ (64) → suggest +{Math.min(2, ranges.other)}.
+                    <br />
+                    <strong style={{ color: '#7DD3FC' }}>F range = {ranges.f}:</strong> Student with 47 (F) and range=3 → suggest +3 → becomes D (50). Student with 46 → no suggestion.
                   </div>
                 </div>
 
