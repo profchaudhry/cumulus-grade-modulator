@@ -44,6 +44,8 @@ export interface StudentRow {
   total: number
   original_grade: string
   roadmap: string
+  pdf_row_order: number
+  roadmap_row_order: number
   suggested_addition: number
   new_total: number
   new_grade: string

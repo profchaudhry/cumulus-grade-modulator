@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { StudentRow, Session, Ranges, computeSuggestion, STANDARD_GRADING } from '@/lib/types'
 
 const GRADE_ORDER = ['F', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A']
 
+type SortKey = 'pdf_row_order' | 'enrollment' | 'name' | 'roadmap' | 'assign_marks' | 'quiz_marks' | 'mid_marks' | 'final_marks' | 'total' | 'original_grade' | 'suggested_addition'
+type SortDir = 'asc' | 'desc'
+
 function gradeColor(g: string) {
-  if (g === 'A') return { bg: '#D1FAE5', text: '#065F46', border: '#6EE7B7' }
+  if (g === 'A')  return { bg: '#D1FAE5', text: '#065F46', border: '#6EE7B7' }
   if (g === 'A-') return { bg: '#ECFDF5', text: '#047857', border: '#A7F3D0' }
   if (g.startsWith('B')) return { bg: '#DBEAFE', text: '#1D4ED8', border: '#93C5FD' }
   if (g.startsWith('C')) return { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D' }
@@ -29,7 +32,7 @@ function GradeBadge({ grade }: { grade: string }) {
 }
 
 function SuggestionCell({ student }: { student: StudentRow }) {
-  const { suggested_addition, new_grade, original_grade, total } = student
+  const { suggested_addition, new_grade, original_grade } = student
   if (suggested_addition === 0) {
     return <span style={{ color: '#94A3B8', fontSize: 12 }}>No change</span>
   }
@@ -56,13 +59,15 @@ export default function SessionPage() {
   const [editing, setEditing] = useState(false)
   const [ranges, setRanges] = useState<Ranges>({ a: 3, other: 3, f: 3 })
   const [saving, setSaving] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('pdf_row_order')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   useEffect(() => {
     if (!id) return
     const load = async () => {
       const [{ data: sess }, { data: studs }] = await Promise.all([
         supabase.from('sessions').select('*').eq('id', id).single(),
-        supabase.from('students').select('*').eq('session_id', id).order('name'),
+        supabase.from('students').select('*').eq('session_id', id).order('pdf_row_order', { ascending: true }),
       ])
       setSession(sess)
       setStudents(studs || [])
@@ -72,20 +77,83 @@ export default function SessionPage() {
     load()
   }, [id])
 
-  const roadmaps = [...new Set(students.map(s => s.roadmap).filter(Boolean))]
-  const grades = [...new Set(students.map(s => s.original_grade))].sort((a, b) => GRADE_ORDER.indexOf(b) - GRADE_ORDER.indexOf(a))
+  const roadmaps = useMemo(() => {
+    // Preserve roadmap order as they appear in the PDF
+    const seen = new Set<string>()
+    const ordered: string[] = []
+    ;(students as StudentRow[]).forEach(s => {
+      if (s.roadmap && !seen.has(s.roadmap)) { seen.add(s.roadmap); ordered.push(s.roadmap) }
+    })
+    return ordered
+  }, [students])
 
-  const filtered = students.filter(s => {
-    if (filter === 'boosted' && s.suggested_addition === 0) return false
-    if (filter === 'unchanged' && s.suggested_addition > 0) return false
-    if (gradeFilter !== 'all' && s.original_grade !== gradeFilter) return false
-    if (roadmapFilter !== 'all' && s.roadmap !== roadmapFilter) return false
-    return true
-  })
+  const grades = [...new Set(students.map(s => s.original_grade))].sort((a, b) => GRADE_ORDER.indexOf(b) - GRADE_ORDER.indexOf(a))
 
   const boostedCount = students.filter(s => s.suggested_addition > 0).length
   const gradeDistrib: Record<string, number> = {}
   students.forEach(s => { gradeDistrib[s.original_grade] = (gradeDistrib[s.original_grade] || 0) + 1 })
+
+  // Sort function
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  // Apply filter then sort
+  const filtered = useMemo(() => {
+    let rows = students.filter(s => {
+      if (filter === 'boosted' && s.suggested_addition === 0) return false
+      if (filter === 'unchanged' && s.suggested_addition > 0) return false
+      if (gradeFilter !== 'all' && s.original_grade !== gradeFilter) return false
+      if (roadmapFilter !== 'all' && s.roadmap !== roadmapFilter) return false
+      return true
+    })
+
+    // Sort
+    rows = [...rows].sort((a, b) => {
+      let av: string | number, bv: string | number
+      if (sortKey === 'original_grade') {
+        av = GRADE_ORDER.indexOf(a.original_grade)
+        bv = GRADE_ORDER.indexOf(b.original_grade)
+      } else if (sortKey === 'roadmap') {
+        av = a.roadmap ?? ''
+        bv = b.roadmap ?? ''
+      } else if (sortKey === 'name' || sortKey === 'enrollment') {
+        av = (a[sortKey] ?? '').toString()
+        bv = (b[sortKey] ?? '').toString()
+      } else {
+        av = (a[sortKey] as number) ?? 0
+        bv = (b[sortKey] as number) ?? 0
+      }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return rows
+  }, [students, filter, gradeFilter, roadmapFilter, sortKey, sortDir])
+
+  // Group by roadmap when in original order and no roadmap filter
+  const groupByRoadmap = sortKey === 'pdf_row_order' && roadmapFilter === 'all'
+
+  // Build display groups
+  const displayGroups: { roadmap: string; rows: StudentRow[] }[] = useMemo(() => {
+    if (!groupByRoadmap) return [{ roadmap: '', rows: filtered }]
+    const groups: { roadmap: string; rows: StudentRow[] }[] = []
+    const map = new Map<string, StudentRow[]>()
+    filtered.forEach(s => {
+      const r = s.roadmap || 'Unknown'
+      if (!map.has(r)) map.set(r, [])
+      map.get(r)!.push(s)
+    })
+    // Preserve roadmap order from PDF
+    roadmaps.forEach(r => { if (map.has(r)) groups.push({ roadmap: r, rows: map.get(r)! }) })
+    return groups
+  }, [filtered, groupByRoadmap, roadmaps])
 
   const handleDelete = async () => {
     if (!confirm('Delete this session and all student data? This cannot be undone.')) return
@@ -96,14 +164,11 @@ export default function SessionPage() {
 
   const handleRecalculate = async () => {
     setSaving(true)
-    // Update ranges on session
     await supabase.from('sessions').update({ ranges }).eq('id', id)
-    // Recompute all students
     const updates = students.map(s => {
       const suggestion = computeSuggestion(
         { enrollment: s.enrollment, reg_no: s.reg_no, name: s.name, assign_marks: s.assign_marks, quiz_marks: s.quiz_marks, mid_marks: s.mid_marks, final_marks: s.final_marks, total: s.total, original_grade: s.original_grade, roadmap: s.roadmap },
-        ranges,
-        STANDARD_GRADING
+        ranges, STANDARD_GRADING
       )
       return supabase.from('students').update({
         suggested_addition: suggestion.suggested_addition,
@@ -112,12 +177,32 @@ export default function SessionPage() {
       }).eq('id', s.id)
     })
     await Promise.all(updates)
-    // Reload
-    const { data } = await supabase.from('students').select('*').eq('session_id', id).order('name')
+    const { data } = await supabase.from('students').select('*').eq('session_id', id).order('pdf_row_order', { ascending: true })
     setStudents(data || [])
     setSaving(false)
     setEditing(false)
   }
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <span style={{ color: '#CBD5E1', marginLeft: 4 }}>↕</span>
+    return <span style={{ color: '#0EA5E9', marginLeft: 4 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
+  const thStyle = (col: SortKey): React.CSSProperties => ({
+    padding: '11px 14px',
+    textAlign: col === 'name' || col === 'enrollment' || col === 'roadmap' ? 'left' : 'center',
+    color: sortKey === col ? '#0EA5E9' : '#64748B',
+    fontWeight: 600,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    userSelect: 'none',
+    background: sortKey === col ? '#F0F9FF' : '#F8FAFC',
+    borderBottom: sortKey === col ? '2px solid #0EA5E9' : '1px solid #E2E8F0',
+    transition: 'all 0.15s',
+  })
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -145,56 +230,42 @@ export default function SessionPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => router.push('/')} style={{ color: '#7DD3FC', background: 'none', border: 'none', cursor: 'pointer', fontSize: 20 }}>☁️</button>
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>/</div>
-            <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
-              {session.course_code} · {session.course_title}
-            </div>
+            <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{session.course_code} · {session.course_title}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ color: '#64748B', fontSize: 12 }}>{session.teacher_name}</span>
-            <button
-              onClick={() => setEditing(!editing)}
-              style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', color: '#7DD3FC', fontSize: 13, cursor: 'pointer' }}
-            >
+            <button onClick={() => setEditing(!editing)}
+              style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', color: '#7DD3FC', fontSize: 13, cursor: 'pointer' }}>
               {editing ? 'Cancel' : '⚙️ Adjust Ranges'}
             </button>
-            <button
-              onClick={handleDelete}
-              style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5', fontSize: 13, cursor: 'pointer' }}
-              title="Delete this session"
-            >
+            <button onClick={handleDelete}
+              style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5', fontSize: 13, cursor: 'pointer' }}>
               🗑 Delete
             </button>
           </div>
         </div>
 
-        {/* Adjust ranges panel */}
         {editing && (
           <div style={{ padding: '16px 0 20px', display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            {[
+            {([
               { key: 'a' as const, label: 'A−→ A range' },
               { key: 'other' as const, label: 'A− to D range' },
               { key: 'f' as const, label: 'F range' },
-            ].map(({ key, label }) => (
+            ]).map(({ key, label }) => (
               <div key={key}>
                 <div style={{ color: '#94A3B8', fontSize: 11, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
-                <input
-                  type="number" min={1} max={15} value={ranges[key]}
+                <input type="number" min={1} max={15} value={ranges[key]}
                   onChange={e => setRanges(r => ({ ...r, [key]: parseInt(e.target.value) || 1 }))}
-                  style={{ width: 70, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(14,165,233,0.4)', color: '#fff', fontSize: 16, fontWeight: 700, textAlign: 'center', outline: 'none' }}
-                />
+                  style={{ width: 70, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(14,165,233,0.4)', color: '#fff', fontSize: 16, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
               </div>
             ))}
-            <button
-              onClick={handleRecalculate}
-              disabled={saving}
-              style={{ padding: '9px 18px', borderRadius: 8, background: '#0EA5E9', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-            >
+            <button onClick={handleRecalculate} disabled={saving}
+              style={{ padding: '9px 18px', borderRadius: 8, background: '#0EA5E9', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               {saving ? 'Recalculating…' : '↻ Recalculate'}
             </button>
           </div>
         )}
 
-        {/* Stats bar */}
         <div style={{ display: 'flex', gap: 24, padding: '16px 0', flexWrap: 'wrap' }}>
           {[
             { label: 'Total Students', value: students.length, color: '#fff' },
@@ -252,39 +323,82 @@ export default function SessionPage() {
             </select>
           )}
 
+          {sortKey !== 'pdf_row_order' && (
+            <button onClick={() => { setSortKey('pdf_row_order'); setSortDir('asc') }}
+              style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #CBD5E1', background: '#fff', color: '#64748B', fontSize: 12, cursor: 'pointer' }}>
+              ↺ Original Order
+            </button>
+          )}
+
           <span style={{ marginLeft: 'auto', color: '#94A3B8', fontSize: 12 }}>{filtered.length} students shown</span>
         </div>
 
-        {/* Table */}
+        {/* Table — grouped by roadmap when in original order */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                  {['#', 'Enrollment', 'Name', 'Roadmap', 'Assign', 'Quiz', 'Mid', 'Final', 'Total', 'Grade', 'Suggestion'].map(h => (
-                    <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748B', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
+                <tr>
+                  <th style={thStyle('pdf_row_order')} onClick={() => handleSort('pdf_row_order')}>#<SortIcon col="pdf_row_order" /></th>
+                  <th style={thStyle('enrollment')} onClick={() => handleSort('enrollment')}>Enrollment<SortIcon col="enrollment" /></th>
+                  <th style={thStyle('name')} onClick={() => handleSort('name')}>Name<SortIcon col="name" /></th>
+                  <th style={thStyle('roadmap')} onClick={() => handleSort('roadmap')}>Roadmap<SortIcon col="roadmap" /></th>
+                  <th style={thStyle('assign_marks')} onClick={() => handleSort('assign_marks')}>Assign<SortIcon col="assign_marks" /></th>
+                  <th style={thStyle('quiz_marks')} onClick={() => handleSort('quiz_marks')}>Quiz<SortIcon col="quiz_marks" /></th>
+                  <th style={thStyle('mid_marks')} onClick={() => handleSort('mid_marks')}>Mid<SortIcon col="mid_marks" /></th>
+                  <th style={thStyle('final_marks')} onClick={() => handleSort('final_marks')}>Final<SortIcon col="final_marks" /></th>
+                  <th style={thStyle('total')} onClick={() => handleSort('total')}>Total<SortIcon col="total" /></th>
+                  <th style={thStyle('original_grade')} onClick={() => handleSort('original_grade')}>Grade<SortIcon col="original_grade" /></th>
+                  <th style={thStyle('suggested_addition')} onClick={() => handleSort('suggested_addition')}>Suggestion<SortIcon col="suggested_addition" /></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s, i) => (
-                  <tr key={s.id} style={{ borderBottom: '1px solid #F1F5F9', background: s.suggested_addition > 0 ? 'rgba(14,165,233,0.02)' : '#fff' }}>
-                    <td style={{ padding: '10px 14px', color: '#94A3B8', fontSize: 12 }}>{i + 1}</td>
-                    <td style={{ padding: '10px 14px', color: '#475569', fontSize: 12, fontFamily: 'monospace' }}>{s.enrollment}</td>
-                    <td style={{ padding: '10px 14px', color: '#0F172A', fontWeight: 500 }}>{s.name}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: '#F1F5F9', color: '#64748B' }}>{s.roadmap}</span>
-                    </td>
-                    <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.assign_marks}</td>
-                    <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.quiz_marks}</td>
-                    <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.mid_marks}</td>
-                    <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.final_marks}</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{s.total}</span>
-                    </td>
-                    <td style={{ padding: '10px 14px' }}><GradeBadge grade={s.original_grade} /></td>
-                    <td style={{ padding: '10px 14px', minWidth: 200 }}><SuggestionCell student={s} /></td>
-                  </tr>
+                {displayGroups.map(({ roadmap, rows }, gi) => (
+                  <>
+                    {/* Roadmap section header — only when grouped */}
+                    {groupByRoadmap && roadmap && (
+                      <tr key={`header-${roadmap}`}>
+                        <td colSpan={11} style={{
+                          padding: '10px 16px',
+                          background: 'linear-gradient(90deg, #0F172A, #1E3A5F)',
+                          borderTop: gi > 0 ? '3px solid #0EA5E9' : undefined,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ color: '#7DD3FC', fontWeight: 700, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                              📚 Program Roadmap: {roadmap}
+                            </span>
+                            <span style={{ color: '#475569', fontSize: 11 }}>· {rows.length} students</span>
+                            {(() => {
+                              const boosted = rows.filter(r => r.suggested_addition > 0).length
+                              return boosted > 0 ? <span style={{ color: '#10B981', fontSize: 11 }}>· {boosted} boosts suggested</span> : null
+                            })()}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {rows.map((s, i) => (
+                      <tr key={s.id} style={{ borderBottom: '1px solid #F1F5F9', background: s.suggested_addition > 0 ? 'rgba(14,165,233,0.03)' : '#fff' }}>
+                        <td style={{ padding: '10px 14px', color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>
+                          {/* Show original row number in original order, sequential otherwise */}
+                          {sortKey === 'pdf_row_order' ? (s.roadmap_row_order || i + 1) : (displayGroups[0].rows.indexOf(s) + 1 || i + 1)}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#475569', fontSize: 12, fontFamily: 'monospace' }}>{s.enrollment}</td>
+                        <td style={{ padding: '10px 14px', color: '#0F172A', fontWeight: 500 }}>{s.name}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: '#F1F5F9', color: '#64748B' }}>{s.roadmap}</span>
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.assign_marks}</td>
+                        <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.quiz_marks}</td>
+                        <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.mid_marks}</td>
+                        <td style={{ padding: '10px 14px', color: '#334155', textAlign: 'center', fontFamily: 'monospace' }}>{s.final_marks}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{s.total}</span>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}><GradeBadge grade={s.original_grade} /></td>
+                        <td style={{ padding: '10px 14px', minWidth: 200 }}><SuggestionCell student={s} /></td>
+                      </tr>
+                    ))}
+                  </>
                 ))}
                 {filtered.length === 0 && (
                   <tr><td colSpan={11} style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>No students match this filter.</td></tr>
@@ -296,6 +410,7 @@ export default function SessionPage() {
 
         <div style={{ marginTop: 16, color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>
           Session ID: <span style={{ fontFamily: 'monospace' }}>{id}</span> · PDF: {session.pdf_name}
+          {sortKey !== 'pdf_row_order' && <span style={{ marginLeft: 8, color: '#0EA5E9' }}>Sorted by {sortKey.replace('_', ' ')} {sortDir}</span>}
         </div>
       </div>
     </div>

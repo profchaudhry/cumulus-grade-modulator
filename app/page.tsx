@@ -88,12 +88,14 @@ export default function Home() {
       if (sErr) throw sErr
 
       // 3. Insert all students with computed suggestions
+      let globalOrder = 0
       const allStudents = courses.flatMap(course =>
-        course.students.map(s => {
+        course.students.map((s, roadmapIdx) => {
           const scheme = Object.keys(course.grading_scheme).length > 0
             ? course.grading_scheme
             : STANDARD_GRADING
           const suggestion = computeSuggestion(s, ranges, scheme)
+          globalOrder++
           return {
             session_id: session.id,
             enrollment: s.enrollment,
@@ -106,6 +108,8 @@ export default function Home() {
             total: s.total,
             original_grade: s.original_grade,
             roadmap: s.roadmap,
+            pdf_row_order: globalOrder,
+            roadmap_row_order: roadmapIdx + 1,
             suggested_addition: suggestion.suggested_addition,
             new_total: suggestion.new_total,
             new_grade: suggestion.new_grade,
