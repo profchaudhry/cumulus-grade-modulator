@@ -225,8 +225,11 @@ export default function SessionPage() {
       ws2['!cols'] = [{ wch: 20 }, { wch: 30 }]
       XLSX.utils.book_append_sheet(wb, ws2, 'Summary')
 
-      const filename = `${session!.course_code}_${session!.course_title}_GradeModulation.xlsx`
-        .replace(/[^a-zA-Z0-9_\-.]/g, '_')
+      const now = new Date()
+      const datePart = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      const timePart = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
+      const filename = `Award List - ${session!.course_title} - ${session!.class} - ${datePart} ${timePart} - Modulated.xlsx`
+        .replace(/[/\\:*?"<>|]/g, '-')
       XLSX.writeFile(wb, filename)
     } finally {
       setExporting(null)
