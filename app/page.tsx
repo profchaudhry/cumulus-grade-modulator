@@ -32,7 +32,7 @@ export default function Home() {
     setLoadingSessions(true)
     const { data } = await supabase
       .from('sessions')
-      .select('id, pdf_name, created_at, course_title, teacher_name')
+      .select('id, pdf_name, created_at, course_code, course_title, teacher_name, class')
       .order('created_at', { ascending: false })
       .limit(10)
     setSessions(data || [])
@@ -172,9 +172,26 @@ export default function Home() {
               {sessions.map((s: any) => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button onClick={() => router.push(`/session/${s.id}`)}
-                    style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 8, cursor: 'pointer', color: '#fff', textAlign: 'left' }}>
-                    <span style={{ fontSize: 13 }}>{s.pdf_name} — {s.course_title}</span>
-                    <span style={{ fontSize: 11, color: '#7DD3FC' }}>{new Date(s.created_at).toLocaleDateString()}</span>
+                    style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 10, cursor: 'pointer', color: '#fff', textAlign: 'left', gap: 12 }}>
+                    {/* Left: course info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                      <span style={{ color: '#38BDF8', fontWeight: 700, fontSize: 13, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{s.course_code}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>·</span>
+                      <span style={{ color: '#fff', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{s.course_title}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>·</span>
+                      <span style={{ color: '#94A3B8', fontSize: 12, whiteSpace: 'nowrap' }}>{s.class}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>·</span>
+                      <span style={{ color: '#7DD3FC', fontSize: 12, whiteSpace: 'nowrap' }}>{s.teacher_name}</span>
+                    </div>
+                    {/* Right: date + time */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: '#7DD3FC', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#475569', whiteSpace: 'nowrap' }}>
+                        {new Date(s.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </span>
+                    </div>
                   </button>
                   <button
                     onClick={(e) => deleteSession(e, s.id)}
