@@ -240,93 +240,217 @@ export default function SessionPage() {
       const { default: autoTable } = await import('jspdf-autotable')
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const PW = 297 // page width
+      const ML = 12 // margin left
+      const MR = 12 // margin right
+      const TW = PW - ML - MR // table width
 
-      // Header
+      // ── HEADER BLOCK ──────────────────────────────────────────────
+      // Dark navy background
       doc.setFillColor(15, 23, 42)
-      doc.rect(0, 0, 297, 28, 'F')
-      doc.setTextColor(125, 211, 252)
-      doc.setFontSize(16)
+      doc.rect(0, 0, PW, 34, 'F')
+
+      // Sky blue accent bar on left
+      doc.setFillColor(14, 165, 233)
+      doc.rect(0, 0, 4, 34, 'F')
+
+      // App name
       doc.setFont('helvetica', 'bold')
-      doc.text('☁ Cumulus Grade Modulator', 14, 12)
-      doc.setFontSize(9)
+      doc.setFontSize(15)
+      doc.setTextColor(255, 255, 255)
+      doc.text('CUMULUS GRADE MODULATOR', ML + 4, 11)
+
+      // Course info line
       doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      doc.setTextColor(148, 163, 184)
+      const courseInfo = `${session!.course_code}   ${session!.course_title}   ${session!.class}   ${session!.teacher_name}`
+      doc.text(courseInfo, ML + 4, 19)
+
+      // Ranges + export date
+      doc.setFontSize(7.5)
       doc.setTextColor(100, 116, 139)
-      doc.text(`${session!.course_code}  ·  ${session!.course_title}  ·  ${session!.class}  ·  ${session!.teacher_name}`, 14, 20)
-      doc.text(`Ranges: A-→A=${ranges.a}  |  A-→D=${ranges.other}  |  F=${ranges.f}  |  Exported: ${new Date().toLocaleString()}`, 14, 25)
+      const rangeInfo = `Ranges  |  A- to A: ${ranges.a} marks   A- to D: ${ranges.other} marks   F: ${ranges.f} marks`
+      doc.text(rangeInfo, ML + 4, 25)
+      const exportDate = `Exported: ${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}  ${new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:true })}`
+      doc.text(exportDate, PW - MR, 25, { align: 'right' })
 
-      // Group rows by roadmap for PDF when in original order
-      const rows = getExportRows()
+      // Summary pills
+      const pills = [
+        { label: 'Total Students', value: String(students.length), color: [14, 165, 233] as [number,number,number] },
+        { label: 'Boosts Suggested', value: String(boostedCount), color: [16, 185, 129] as [number,number,number] },
+        { label: 'No Change', value: String(students.length - boostedCount), color: [100, 116, 139] as [number,number,number] },
+      ]
+      let pillX = ML + 4
+      pills.forEach(p => {
+        const tw = doc.getTextWidth(p.label + '  ' + p.value) + 8
+        doc.setFillColor(p.color[0], p.color[1], p.color[2])
+        doc.setGState(new (doc as any).GState({ opacity: 0.15 }))
+        doc.roundedRect(pillX, 27.5, tw, 5, 1, 1, 'F')
+        doc.setGState(new (doc as any).GState({ opacity: 1 }))
+        doc.setFontSize(6.5)
+        doc.setTextColor(p.color[0], p.color[1], p.color[2])
+        doc.text(`${p.label}  ${p.value}`, pillX + 2, 31)
+        pillX += tw + 3
+      })
 
-      // Build table body — insert roadmap headers when grouped
-      const tableBody: (string | number)[][] = []
+      // ── TABLE ─────────────────────────────────────────────────────
+      // Build body with roadmap section headers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tableBody: any[][] = []
       let lastRoadmap = ''
+      let rowNum = 0
 
-      filtered.forEach((s, i) => {
+      filtered.forEach((s) => {
+        // Roadmap section header row
         if (groupByRoadmap && s.roadmap !== lastRoadmap) {
           lastRoadmap = s.roadmap
-          // Roadmap header row (will be styled separately)
-          tableBody.push([
-            { content: `📚 Roadmap: ${s.roadmap}`, colSpan: 13, styles: { fillColor: [30, 58, 95], textColor: [125, 211, 252], fontStyle: 'bold', fontSize: 9 } } as unknown as string,
-          ])
+          tableBody.push([{
+            content: `PROGRAM ROADMAP: ${s.roadmap.toUpperCase()}`,
+            colSpan: 12,
+            styles: {
+              fillColor: [30, 58, 95],
+              textColor: [125, 211, 252],
+              fontStyle: 'bold',
+              fontSize: 7.5,
+              cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
+            }
+          }])
         }
-        const r = rows[i]
+
+        rowNum++
+        const suggestion = s.suggested_addition > 0
+          ? `+${s.suggested_addition} -> ${s.new_total}`
+          : 'No change'
+        const newGrade = s.suggested_addition > 0 ? s.new_grade : ''
+
         tableBody.push([
-          r['#'], r['Enrollment'], r['Name'], r['Roadmap'],
-          r['Assign (20)'], r['Quiz (15)'], r['Mid (25)'], r['Final (40)'],
-          r['Total (100)'], r['Grade'],
-          r['Marks Added'] || '—', r['New Total'] || '—', r['New Grade'],
+          rowNum,
+          s.enrollment,
+          s.name,
+          s.roadmap,
+          s.assign_marks,
+          s.quiz_marks,
+          s.mid_marks,
+          s.final_marks,
+          s.total,
+          s.original_grade,
+          suggestion,
+          newGrade,
         ])
       })
 
       autoTable(doc, {
-        startY: 32,
-        head: [['#', 'Enrollment', 'Name', 'Roadmap', 'Assign', 'Quiz', 'Mid', 'Final', 'Total', 'Grade', '+Marks', 'New Total', 'New Grade']],
+        startY: 36,
+        head: [[
+          '#', 'Enrollment', 'Name', 'Roadmap',
+          'Assign\n(20)', 'Quiz\n(15)', 'Mid\n(25)', 'Final\n(40)',
+          'Total\n(100)', 'Grade',
+          'Suggestion', 'New\nGrade'
+        ]],
         body: tableBody,
-        styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak' },
-        headStyles: { fillColor: [14, 165, 233], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
+        styles: {
+          fontSize: 8,
+          cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+          overflow: 'linebreak',
+          lineColor: [226, 232, 240],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [14, 165, 233],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 7.5,
+          halign: 'center',
+          valign: 'middle',
+          cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
         columnStyles: {
-          0: { cellWidth: 8, halign: 'center' },
-          1: { cellWidth: 28, font: 'courier' },
-          2: { cellWidth: 42 },
-          3: { cellWidth: 18, halign: 'center' },
-          4: { cellWidth: 13, halign: 'center' },
-          5: { cellWidth: 13, halign: 'center' },
-          6: { cellWidth: 13, halign: 'center' },
-          7: { cellWidth: 13, halign: 'center' },
-          8: { cellWidth: 13, halign: 'center', fontStyle: 'bold' },
-          9: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
-          10: { cellWidth: 14, halign: 'center', textColor: [14, 165, 233] },
-          11: { cellWidth: 16, halign: 'center' },
-          12: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+          0:  { cellWidth: 8,  halign: 'center', textColor: [148, 163, 184] },
+          1:  { cellWidth: 30, font: 'courier',  fontSize: 7, textColor: [71, 85, 105] },
+          2:  { cellWidth: 46, fontStyle: 'bold', textColor: [15, 23, 42] },
+          3:  { cellWidth: 18, halign: 'center', fontSize: 7, textColor: [100, 116, 139] },
+          4:  { cellWidth: 13, halign: 'center' },
+          5:  { cellWidth: 13, halign: 'center' },
+          6:  { cellWidth: 13, halign: 'center' },
+          7:  { cellWidth: 13, halign: 'center' },
+          8:  { cellWidth: 14, halign: 'center', fontStyle: 'bold', fontSize: 9 },
+          9:  { cellWidth: 14, halign: 'center', fontStyle: 'bold', fontSize: 9 },
+          10: { cellWidth: 35, halign: 'center', fontSize: 7.5 },
+          11: { cellWidth: 14, halign: 'center', fontStyle: 'bold', fontSize: 9 },
         },
         didParseCell: (data) => {
-          // Highlight boosted rows
-          const studentIdx = filtered[data.row.index]
-          if (studentIdx?.suggested_addition > 0 && data.row.section === 'body') {
+          if (data.row.section !== 'body') return
+
+          // Skip roadmap header rows
+          if (data.cell.colSpan && data.cell.colSpan > 1) return
+
+          // Find the actual student for this row
+          // Count non-header rows up to this point
+          let studentRow = 0
+          for (let ri = 0; ri <= data.row.index; ri++) {
+            const cell = data.table.body[ri]?.cells[0]
+            if (cell && !(data.table.body[ri]?.cells[0] as any)?.colSpan) studentRow++
+          }
+          const s = filtered[studentRow - 1]
+          if (!s) return
+
+          // Highlight boosted rows with a subtle blue tint
+          if (s.suggested_addition > 0) {
             data.cell.styles.fillColor = [224, 242, 254]
           }
-          // Grade colours in Grade column
-          if (data.column.index === 9 && data.row.section === 'body') {
+
+          // Grade column colouring
+          if (data.column.index === 9) {
             const grade = String(data.cell.raw)
-            if (grade === 'A') data.cell.styles.textColor = [5, 150, 105]
-            else if (grade.startsWith('B')) data.cell.styles.textColor = [29, 78, 216]
-            else if (grade.startsWith('C')) data.cell.styles.textColor = [146, 64, 14]
-            else if (grade.startsWith('D')) data.cell.styles.textColor = [153, 27, 27]
-            else if (grade === 'F') data.cell.styles.textColor = [91, 33, 182]
+            if (grade === 'A')       data.cell.styles.textColor = [5, 150, 105]
+            else if (grade === 'A-') data.cell.styles.textColor = [16, 185, 129]
+            else if (grade.startsWith('B')) data.cell.styles.textColor = [37, 99, 235]
+            else if (grade.startsWith('C')) data.cell.styles.textColor = [180, 83, 9]
+            else if (grade.startsWith('D')) data.cell.styles.textColor = [185, 28, 28]
+            else if (grade === 'F')  data.cell.styles.textColor = [109, 40, 217]
+          }
+
+          // New grade column colouring
+          if (data.column.index === 11 && String(data.cell.raw)) {
+            const grade = String(data.cell.raw)
+            if (grade === 'A')       data.cell.styles.textColor = [5, 150, 105]
+            else if (grade === 'A-') data.cell.styles.textColor = [16, 185, 129]
+            else if (grade.startsWith('B')) data.cell.styles.textColor = [37, 99, 235]
+            else if (grade.startsWith('C')) data.cell.styles.textColor = [180, 83, 9]
+            else if (grade.startsWith('D')) data.cell.styles.textColor = [185, 28, 28]
+          }
+
+          // Suggestion column: colour the +N text
+          if (data.column.index === 10 && s.suggested_addition > 0) {
+            data.cell.styles.textColor = [14, 165, 233]
+            data.cell.styles.fontStyle = 'bold'
           }
         },
-        margin: { left: 14, right: 14 },
+        margin: { left: ML, right: MR, top: 36 },
       })
 
-      // Footer
+      // ── FOOTER ────────────────────────────────────────────────────
       const pageCount = (doc as any).internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p)
+        const pageH = doc.internal.pageSize.height
+
+        // Footer bar
+        doc.setFillColor(248, 250, 252)
+        doc.rect(0, pageH - 10, PW, 10, 'F')
+        doc.setDrawColor(226, 232, 240)
+        doc.line(0, pageH - 10, PW, pageH - 10)
+
+        doc.setFont('helvetica', 'normal')
         doc.setFontSize(7)
         doc.setTextColor(148, 163, 184)
-        doc.text(`Page ${i} of ${pageCount}  ·  Cumulus Grade Modulator`, 14, doc.internal.pageSize.height - 5)
-        doc.text(`${students.length} students  ·  ${students.filter(s => s.suggested_addition > 0).length} boosts suggested`, 297 - 14, doc.internal.pageSize.height - 5, { align: 'right' })
+        doc.text(`Page ${p} of ${pageCount}`, ML, pageH - 4)
+        doc.text('Cumulus Grade Modulator  |  Bahria University E-8 Campus', PW / 2, pageH - 4, { align: 'center' })
+        doc.text(`${students.length} students  |  ${boostedCount} boosts`, PW - MR, pageH - 4, { align: 'right' })
       }
 
       const filename = `${session!.course_code}_${session!.course_title}_GradeModulation.pdf`
