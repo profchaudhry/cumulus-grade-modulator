@@ -172,32 +172,61 @@ export async function POST(req: NextRequest) {
         const regNo = regMatch[1]
         const afterReg = afterEnroll.substring(regMatch[1].length)
 
-        // Find marks block: trailing digits+grade
-        // Marks block ends with grade [A-Z][+-]? preceded by digits
-        const marksBlockMatch = afterReg.match(/(\d{8,12}[A-Z][+-]?)$/)
-        if (!marksBlockMatch) continue
+        // Find marks block: may be on this line or on a following line
+        // Pattern A: marks on same line → "SOME NAME1812181550D"
+        // Pattern B: name wraps, marks on next line → "SOME NAME\nPART2\n1812181550D"
+        let marksBlock = ''
+        let nameRaw = ''
+        let skipLines = 0
 
-        const marksBlock = marksBlockMatch[1]
+        const inlineMatch = afterReg.match(/(\d{8,12}[A-Z][+-]?)$/)
+        if (inlineMatch) {
+          // Marks found on same line
+          marksBlock = inlineMatch[1]
+          nameRaw = afterReg.substring(0, afterReg.length - marksBlock.length).trim()
+
+          // Still check if next line is a name continuation (not marks)
+          if (i + 1 < lines.length) {
+            const next = lines[i + 1]
+            if (next && /^[A-Z][A-Z\s]+$/.test(next) && !ENROLL_RE.test(next) && next.length < 40 && !/^\d{8,12}[A-Z]/.test(next)) {
+              nameRaw = (nameRaw + ' ' + next).trim()
+              skipLines = 1
+            }
+          }
+        } else {
+          // Marks not on this line — name continues on next line(s), marks on a later line
+          // Accumulate name continuation lines then find marks line
+          let nameParts = [afterReg.trim()]
+          let j = i + 1
+          while (j < lines.length && j <= i + 3) {
+            const nextLine = lines[j]
+            // Is this the marks line? Pure digits + grade, no letters except trailing grade
+            if (/^\d{8,12}[A-Z][+-]?$/.test(nextLine)) {
+              marksBlock = nextLine
+              skipLines = j - i
+              break
+            }
+            // Is it a name continuation? All uppercase letters/spaces, no enrollment
+            if (/^[A-Z][A-Z\s]+$/.test(nextLine) && !ENROLL_RE.test(nextLine) && nextLine.length < 40) {
+              nameParts.push(nextLine)
+              j++
+              continue
+            }
+            break
+          }
+          nameRaw = nameParts.join(' ').trim()
+        }
+
+        if (!marksBlock) continue
         const parsed = extractMarks(marksBlock)
         if (!parsed) continue
 
-        // Name is everything between reg# and marks block
-        const nameRaw = afterReg.substring(0, afterReg.length - marksBlock.length).trim()
-
-        // Handle multi-line names (e.g. "MUHAMMAD JUNAID\nPARACHA")
-        let name = nameRaw
-        if (i + 1 < lines.length) {
-          const next = lines[i + 1]
-          if (next && /^[A-Z\s]+$/.test(next) && !ENROLL_RE.test(next) && next.length < 40) {
-            name = (nameRaw + ' ' + next).trim()
-            i++
-          }
-        }
+        i += skipLines
 
         currentStudents.push({
           enrollment,
           reg_no: regNo,
-          name,
+          name: nameRaw,
           assign_marks: parsed.assign,
           quiz_marks: parsed.quiz,
           mid_marks: parsed.mid,
