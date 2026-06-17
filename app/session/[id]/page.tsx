@@ -457,7 +457,7 @@ export default function SessionPage() {
       const now = new Date()
       const datePart = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
       const timePart = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })
-      const filename = `Award List - ${session!.course_title} - ${session!.class} - ${datePart} ${timePart}.pdf`
+      const filename = `Award List - ${session!.course_title} - ${session!.class} - ${datePart} ${timePart} - Modulated.pdf`
         .replace(/[/\\:*?"<>|]/g, '-')
       doc.save(filename)
     } finally {
