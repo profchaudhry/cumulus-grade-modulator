@@ -61,6 +61,7 @@ export interface Session {
   class: string
   ranges: Ranges | null
   grading_scheme: GradingScheme | null
+  roadmap_schemes: Record<string, GradingScheme> | null
 }
 
 // Standard Bahria grading scheme

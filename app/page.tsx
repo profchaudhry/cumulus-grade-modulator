@@ -100,6 +100,15 @@ export default function Home() {
       const schemeSource = courses.find(c => Object.keys(c.grading_scheme).length > 0)
       const sessionScheme = schemeSource ? schemeSource.grading_scheme : STANDARD_GRADING
 
+      // Build a roadmap → grading scheme map so each section can display (and use)
+      // its own scheme, since different roadmaps can technically carry different schemes
+      const roadmapSchemes: Record<string, typeof sessionScheme> = {}
+      courses.forEach(course => {
+        if (course.roadmap && Object.keys(course.grading_scheme).length > 0) {
+          roadmapSchemes[course.roadmap] = course.grading_scheme
+        }
+      })
+
       const { data: session, error: sErr } = await supabase
         .from('sessions')
         .insert({
@@ -110,6 +119,7 @@ export default function Home() {
           class: first.class_name,
           ranges,
           grading_scheme: sessionScheme,
+          roadmap_schemes: roadmapSchemes,
         })
         .select()
         .single()

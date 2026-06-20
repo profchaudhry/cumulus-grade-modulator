@@ -690,7 +690,7 @@ export default function SessionPage() {
                           background: 'linear-gradient(90deg, #0F172A, #1E3A5F)',
                           borderTop: gi > 0 ? '3px solid #0EA5E9' : undefined,
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span style={{ color: '#7DD3FC', fontWeight: 700, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                               📚 Program Roadmap: {roadmap}
                             </span>
@@ -700,6 +700,24 @@ export default function SessionPage() {
                               return boosted > 0 ? <span style={{ color: '#10B981', fontSize: 11 }}>· {boosted} boosts suggested</span> : null
                             })()}
                           </div>
+                          {(() => {
+                            const scheme = session?.roadmap_schemes?.[roadmap]
+                            if (!scheme || Object.keys(scheme).length === 0) return null
+                            const orderedGrades = Object.keys(scheme).sort(
+                              (a, b) => GRADE_ORDER.indexOf(b) - GRADE_ORDER.indexOf(a)
+                            )
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                                <span style={{ color: '#475569', fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Grading Scheme:</span>
+                                {orderedGrades.map(g => (
+                                  <span key={g} style={{ fontSize: 9.5, color: '#94A3B8', fontFamily: 'monospace' }}>
+                                    <span style={{ color: '#7DD3FC', fontWeight: 700 }}>{g}</span>
+                                    {': '}{scheme[g].min}-{scheme[g].max}
+                                  </span>
+                                ))}
+                              </div>
+                            )
+                          })()}
                         </td>
                       </tr>
                     )}
