@@ -19,7 +19,7 @@ export default function Home() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [ranges, setRanges] = useState<Ranges>({ a: 3, other: 3, f: 3 })
+  const [ranges, setRanges] = useState<Ranges>({ a: 3, other: 1, f: 3 })
   const [step, setStep] = useState<'upload' | 'ranges' | 'processing'>('upload')
   const [error, setError] = useState('')
   const [sessions, setSessions] = useState<SessionListItem[]>([])

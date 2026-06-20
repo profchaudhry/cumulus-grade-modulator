@@ -57,7 +57,7 @@ export default function SessionPage() {
   const [gradeFilter, setGradeFilter] = useState('all')
   const [roadmapFilter, setRoadmapFilter] = useState('all')
   const [editing, setEditing] = useState(false)
-  const [ranges, setRanges] = useState<Ranges>({ a: 3, other: 3, f: 3 })
+  const [ranges, setRanges] = useState<Ranges>({ a: 3, other: 1, f: 3 })
   const [saving, setSaving] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('pdf_row_order')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -707,11 +707,11 @@ export default function SessionPage() {
                               (a, b) => GRADE_ORDER.indexOf(b) - GRADE_ORDER.indexOf(a)
                             )
                             return (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                                <span style={{ color: '#475569', fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Grading Scheme:</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                                <span style={{ color: '#7DD3FC', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Grading Scheme:</span>
                                 {orderedGrades.map(g => (
-                                  <span key={g} style={{ fontSize: 9.5, color: '#94A3B8', fontFamily: 'monospace' }}>
-                                    <span style={{ color: '#7DD3FC', fontWeight: 700 }}>{g}</span>
+                                  <span key={g} style={{ fontSize: 11.5, color: '#CBD5E1', fontFamily: 'monospace' }}>
+                                    <span style={{ color: '#fff', fontWeight: 700 }}>{g}</span>
                                     {': '}{scheme[g].min}-{scheme[g].max}
                                   </span>
                                 ))}
