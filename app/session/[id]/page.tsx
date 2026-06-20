@@ -471,10 +471,13 @@ export default function SessionPage() {
   const handleRecalculate = async () => {
     setSaving(true)
     await supabase.from('sessions').update({ ranges }).eq('id', id)
+    const activeScheme = session?.grading_scheme && Object.keys(session.grading_scheme).length > 0
+      ? session.grading_scheme
+      : STANDARD_GRADING
     const updates = students.map(s => {
       const suggestion = computeSuggestion(
         { enrollment: s.enrollment, reg_no: s.reg_no, name: s.name, assign_marks: s.assign_marks, quiz_marks: s.quiz_marks, mid_marks: s.mid_marks, final_marks: s.final_marks, total: s.total, original_grade: s.original_grade, roadmap: s.roadmap },
-        ranges, STANDARD_GRADING
+        ranges, activeScheme
       )
       return supabase.from('students').update({
         suggested_addition: suggestion.suggested_addition,

@@ -60,6 +60,7 @@ export interface Session {
   teacher_name: string
   class: string
   ranges: Ranges | null
+  grading_scheme: GradingScheme | null
 }
 
 // Standard Bahria grading scheme
@@ -98,6 +99,14 @@ export function computeSuggestion(
   // Already at A — no uplift possible
   if (currentGrade === 'A') {
     return { suggested_addition: 0, new_total: total, new_grade: 'A' }
+  }
+
+  // Absent / withdrawn / not-yet-graded students (all component marks are 0)
+  // should never receive a boost suggestion — they have no real performance to modulate.
+  const hasNoMarks = student.assign_marks === 0 && student.quiz_marks === 0 &&
+    student.mid_marks === 0 && student.final_marks === 0 && total === 0
+  if (hasNoMarks) {
+    return { suggested_addition: 0, new_total: total, new_grade: currentGrade }
   }
 
   // Determine the range bucket for this student's current grade

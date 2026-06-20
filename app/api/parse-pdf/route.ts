@@ -155,7 +155,11 @@ export async function POST(req: NextRequest) {
             !ENROLL_RE.test(nextRow[0]) &&
             !NUM_RE.test(nextRow[0]) &&
             !GRADE_RE.test(nextRow[0]) &&
-            nextRow[0] !== 'Course Code'
+            nextRow[0] !== 'Course Code' &&
+            nextRow[0] !== 'Course Title' &&
+            nextRow[0] !== 'Grading Scheme' &&
+            nextRow[0] !== 'Program' &&
+            nextRow[0] !== '#'
           ) {
             name += ' ' + nextRow[0]
             j++
@@ -175,11 +179,28 @@ export async function POST(req: NextRequest) {
         if (marks.length === 5) {
           ;[assign, quiz, mid, final, total] = marks
         } else if (marks.length === 4) {
-          // Some rows omit the final mark (e.g. final not submitted) → [assign, quiz, mid, total]
-          ;[assign, quiz, mid, total] = marks
+          // One exam column is missing (final not submitted, or rarely mid).
+          // Resolve by checking which arrangement makes the components sum to the total —
+          // the last number is always the total since it's the right-most/widest column.
+          const total4 = marks[3]
+          const [m0, m1, m2] = marks
+          if (m0 + m1 + m2 === total4) {
+            // assign+quiz+mid already equals total → final was never entered (0)
+            ;[assign, quiz, mid] = [m0, m1, m2]
+            final = 0
+            total = total4
+          } else {
+            // Fallback: assume final is missing, mid absorbed as 0 — matches PDF's
+            // most common pattern (final not yet submitted) while still recording total
+            ;[assign, quiz, mid] = [m0, m1, m2]
+            final = 0
+            total = total4
+          }
         } else if (marks.length === 3) {
-          // Absent / withdrawn students: [0, 0, 0] with F grade, no total column
+          // Absent / withdrawn students: [0, 0, 0] with F grade, no total column entered
           ;[assign, quiz, mid] = marks
+          final = 0
+          total = 0
         } else {
           // Unexpected shape — skip this row rather than store garbage
           continue

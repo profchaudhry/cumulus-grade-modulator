@@ -5,6 +5,16 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ParsedCourse, Ranges, computeSuggestion, STANDARD_GRADING } from '@/lib/types'
 
+interface SessionListItem {
+  id: string
+  pdf_name: string
+  created_at: string
+  course_code: string
+  course_title: string
+  teacher_name: string
+  class: string
+}
+
 export default function Home() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
@@ -12,7 +22,7 @@ export default function Home() {
   const [ranges, setRanges] = useState<Ranges>({ a: 3, other: 3, f: 3 })
   const [step, setStep] = useState<'upload' | 'ranges' | 'processing'>('upload')
   const [error, setError] = useState('')
-  const [sessions, setSessions] = useState<{ id: string; pdf_name: string; created_at: string }[]>([])
+  const [sessions, setSessions] = useState<SessionListItem[]>([])
   const [loadingSessions, setLoadingSessions] = useState(false)
   const [sessionsFetched, setSessionsFetched] = useState(false)
 
@@ -44,14 +54,18 @@ export default function Home() {
     e.preventDefault()
     setDragging(false)
     const f = e.dataTransfer.files[0]
-    if (f?.type === 'application/pdf') { setFile(f); setStep('ranges') }
-    else setError('Please upload a PDF file.')
+    if (!f) return
+    if (f.type !== 'application/pdf') { setError('Please upload a PDF file.'); return }
+    if (f.size > 20 * 1024 * 1024) { setError('PDF is too large (max 20MB). Try splitting it into smaller files.'); return }
+    setFile(f); setStep('ranges'); setError('')
   }, [])
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
-    if (f?.type === 'application/pdf') { setFile(f); setStep('ranges'); setError('') }
-    else setError('Please upload a PDF file.')
+    if (!f) return
+    if (f.type !== 'application/pdf') { setError('Please upload a PDF file.'); return }
+    if (f.size > 20 * 1024 * 1024) { setError('PDF is too large (max 20MB). Try splitting it into smaller files.'); return }
+    setFile(f); setStep('ranges'); setError('')
   }
 
   const handleProcess = async () => {
@@ -69,10 +83,23 @@ export default function Home() {
       const courses: ParsedCourse[] = json.courses
       if (!courses.length) throw new Error('No courses found in PDF')
 
-      // Use metadata from first course
+      // Use metadata from first course (most PDFs are one course across multiple roadmaps)
       const first = courses[0]
 
+      // Sanity check: if the PDF actually contains multiple DIFFERENT courses
+      // (not just roadmap variants of the same course), warn — only the first
+      // course's metadata is stored on the session, but all students are still saved.
+      const distinctCourseCodes = new Set(courses.map(c => c.course_code))
+      if (distinctCourseCodes.size > 1) {
+        console.warn(`PDF contains ${distinctCourseCodes.size} distinct course codes; only "${first.course_code}" metadata will be shown on the session header. All students from all courses are still saved.`)
+      }
+
       // 2. Create session
+      // Use the grading scheme from whichever course has one defined (most PDFs
+      // repeat the same scheme per roadmap section, so the first non-empty one is authoritative)
+      const schemeSource = courses.find(c => Object.keys(c.grading_scheme).length > 0)
+      const sessionScheme = schemeSource ? schemeSource.grading_scheme : STANDARD_GRADING
+
       const { data: session, error: sErr } = await supabase
         .from('sessions')
         .insert({
@@ -82,6 +109,7 @@ export default function Home() {
           teacher_name: first.teacher_name,
           class: first.class_name,
           ranges,
+          grading_scheme: sessionScheme,
         })
         .select()
         .single()
@@ -169,7 +197,7 @@ export default function Home() {
             <p style={{ color: '#7DD3FC', textAlign: 'center', padding: 16 }}>No past sessions found.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {sessions.map((s: any) => (
+              {sessions.map((s) => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button onClick={() => router.push(`/session/${s.id}`)}
                     style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 10, cursor: 'pointer', color: '#fff', textAlign: 'left', gap: 12 }}>
